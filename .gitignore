@@ -1,0 +1,18 @@
+# 本地大模型文件（体积大，不上传，用 download_model.sh 下载）
+model_file/
+
+# 用户上传的文档（隐私数据）
+uploads/
+
+# codebuddy 任务产物
+codebuddy_tasks/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 环境配置
+.env
+
+# macOS
+.DS_Store

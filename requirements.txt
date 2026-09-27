@@ -1,0 +1,9 @@
+flask
+requests
+markitdown[pdf]
+python-docx
+python-pptx
+mammoth
+openpyxl
+xlrd
+beautifulsoup4
