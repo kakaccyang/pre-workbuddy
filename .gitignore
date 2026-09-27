@@ -14,5 +14,6 @@ __pycache__/
 # 环境配置
 .env
 
+.idea
 # macOS
 .DS_Store
