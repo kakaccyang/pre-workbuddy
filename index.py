@@ -88,7 +88,11 @@ def index():
 @app.route("/app_config", methods=['GET'])
 def app_config():
     # 告诉前端本地模型能力是否可用（不可用时前端“不消耗token”选项不可选）
-    return jsonify({"use_local_model": bool(getattr(config, "use_local_model", False))})
+    # 同时返回 workbuddy 官网地址，前端弹窗要显示
+    return jsonify({
+        "use_local_model": bool(getattr(config, "use_local_model", False)),
+        "workbuddy_url": getattr(config, "WORKBUDDY_URL", "") or "",
+    })
 
 @app.route("/set_chat_mode", methods=['POST'])
 def set_chat_mode():
@@ -192,6 +196,10 @@ def chat():
     memory = session.get("memory", [])
     # 根据session里的模式选择：消耗token走云端GLM，否则走本地模型
     reply = call_ai(user_message, system_prompt, memory, use_local=use_local_model())
+    # 兜底：call_ai 返回非字符串（如 False 或 dict）时不要直接 jsonify，
+    # 否则前端模板字符串渲染成 [object Object]
+    if not isinstance(reply, str) or not reply.strip():
+        return jsonify({"reply": "AI 接口暂时无响应，请检查 API_KEY / 本地模型后重试"}), 200
     # 把本轮对话追加进记忆
     memory.append({"role": "user", "content": user_message})
     memory.append({"role": "assistant", "content": reply})
@@ -296,11 +304,23 @@ def call_codebuddy():
     buddy_type = data.get("type") or "codebuddy"
     if not prompt:
         return jsonify({"status": "error", "message": "任务prompt不能为空"}), 400
-    # 当前只接入了本地 codebuddy；workbuddy 没有本地 daemon
-    if buddy_type != "codebuddy":
-        return jsonify({"status": "error", "message": f"暂未接入{buddy_type}，目前仅支持本地codebuddy"}), 400
 
-    # 每个任务一个独立产物目录，建在已信任的项目目录下
+    # 前置守卫：use_local_model=True 才允许切到 workbuddy（与下拉框守卫一致）
+    if buddy_type == "workbuddy" and not getattr(config, "use_local_model", False):
+        return jsonify({"status": "error",
+                        "message": "未启用本地模型（config.use_local_model=False），无法切到 workbuddy"}), 400
+
+    # workbuddy 分支：前端已在当前浏览器新标签页跳转到 workbuddy 并复制 prompt，
+    # 此分支不再做后端浏览器自动化，仅返回官网地址作兜底
+    if buddy_type == "workbuddy":
+        workbuddy_url = getattr(config, "WORKBUDDY_URL", "") or ""
+        return jsonify({
+            "status": "ok",
+            "workbuddy_url": workbuddy_url,
+            "message": "请在 workbuddy 页面对话框粘贴 prompt 后发送",
+        })
+
+    # codebuddy 分支：每个任务一个独立产物目录，建在已信任的项目目录下
     task_name = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     task_dir = os.path.join(TASK_ROOT, task_name)
     os.makedirs(task_dir, exist_ok=False)

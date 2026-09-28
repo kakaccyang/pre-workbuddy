@@ -42,13 +42,23 @@ def call_glm(user_msg, system_prompt, memory_msg = []):
             "temperature": 0.7
         }
     resp = requests.post(f"{config.BASE_AI_URL}", headers=headers, json=payload)
-    res_json = resp.json()
+    try:
+        res_json = resp.json()
+    except ValueError:
+        return False
     try:
         if "choices" in res_json:
             return res_json["choices"][0]["message"]["content"]
-        else:
-            return res_json
-    except:
+        # 接口返回错误对象时，不要把整个 dict 返回给前端（否则渲染成 [object Object]）
+        if isinstance(res_json.get("error"), dict):
+            err = res_json["error"].get("message")
+            if err:
+                return f"[接口错误] {err}"
+        # HTTP 非 2xx 时，把状态码和原始文本带出来，方便定位（API_KEY 失效/额度耗尽等）
+        if not resp.ok:
+            return f"[接口错误] HTTP {resp.status_code}：{resp.text[:200]}"
+        return False
+    except Exception:
         return False
 
 

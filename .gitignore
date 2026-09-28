@@ -7,6 +7,9 @@ uploads/
 # codebuddy 任务产物
 codebuddy_tasks/
 
+# browser_use / playwright 持久化浏览器数据（含登录 cookie 等敏感数据，绝不上传）
+browser_data/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -14,6 +17,8 @@ __pycache__/
 # 环境配置
 .env
 
-.idea
+# IDE
+.idea/
+
 # macOS
 .DS_Store

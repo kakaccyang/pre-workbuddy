@@ -875,7 +875,8 @@
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
         <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">执行方式</span>
-        <select id="buddyTypeSelect" class="input" style="flex:1;margin-bottom:0;padding:9px 10px;">
+        <select id="buddyTypeSelect" class="input" style="flex:1;margin-bottom:0;padding:9px 10px;" disabled
+                title="后端未启用本地模型（config.use_local_model = False）">
           <option value="codebuddy" selected>codebuddy</option>
           <option value="workbuddy">workbuddy</option>
         </select>
@@ -924,6 +925,21 @@
   </div>
 </div>
 
+<!-- workbuddy 提示弹窗（切到 workbuddy 时显示） -->
+<div class="modal" id="workbuddyHintModal">
+  <div class="modal-box">
+    <h3>使用 workbuddy 执行</h3>
+    <p>选择 workbuddy 后，点击“开始作业”生成 prompt、再点“是”确认，会在当前浏览器新标签页打开 workbuddy 页面，并把 prompt 复制到剪贴板，到 workbuddy 对话框 Ctrl+V 粘贴后发送即可。请确认当前浏览器已登录 workbuddy。</p>
+    <p style="margin-top:10px;font-size:13px;color:var(--text-secondary);">workbuddy 官网地址：</p>
+    <p style="margin-top:4px;word-break:break-all;">
+      <a id="workbuddyHintUrl" href="#" target="_blank" style="color:var(--primary);"></a>
+    </p>
+    <div class="modal-buttons">
+      <button class="btn btn-primary" onclick="document.getElementById('workbuddyHintModal').classList.remove('show')">我知道了</button>
+    </div>
+  </div>
+</div>
+
 <script>
 
 // stage: "job" 表示首次需调用 get_job_man；选完职业后切到 "chat"，之后一直走 /chat
@@ -948,6 +964,8 @@ async function initChatMode(){
       sel.disabled = true;
       sel.title = "后端未启用本地模型（config.use_local_model = False）";
     }
+    // 顺带初始化执行方式下拉框（守卫规则与对话模式一致）
+    initBuddyType(data);
   }catch(err){
     // 配置接口异常时保守处理：不可切换，走云端
     sel.value = "cloud";
@@ -965,6 +983,38 @@ async function syncChatMode(){
       body: JSON.stringify({ use_local: useLocal })
     });
   }catch(err){ /* 网络异常忽略，下次切换时再同步 */ }
+}
+
+// ===== 执行方式：codebuddy / workbuddy =====
+// 守卫规则：仅当 config.use_local_model=True 时下拉框可选；否则锁定 codebuddy
+// 切到 workbuddy 时弹窗提示用户先在浏览器中登录好 workbuddy 页面，并显示官网地址
+var workbuddyUrl = "";
+function initBuddyType(appConfig){
+  const sel = document.getElementById('buddyTypeSelect');
+  workbuddyUrl = (appConfig && appConfig.workbuddy_url) || "";
+  if(appConfig && appConfig.use_local_model){
+    sel.disabled = false;
+    sel.removeAttribute("title");
+    sel.onchange = onBuddyTypeChange;
+  }else{
+    sel.value = "codebuddy";
+    sel.disabled = true;
+    sel.title = "后端未启用本地模型（config.use_local_model = False），仅支持 codebuddy";
+  }
+}
+
+function onBuddyTypeChange(){
+  const sel = document.getElementById('buddyTypeSelect');
+  if(sel.value === "workbuddy"){
+    // 弹窗提示用户先在浏览器中登录好 workbuddy，并显示官网地址
+    const urlDom = document.getElementById('workbuddyHintUrl');
+    urlDom.textContent = workbuddyUrl || "（后端未配置 WORKBUDDY_URL）";
+    urlDom.href = workbuddyUrl || "#";
+    document.getElementById('workbuddyHintModal').classList.add('show');
+  }else{
+    // 切回 codebuddy：关掉可能开着的提示弹窗
+    document.getElementById('workbuddyHintModal').classList.remove('show');
+  }
 }
 
 initChatMode();
@@ -1100,10 +1150,17 @@ async function endConversation(){
     // 将生成好的prompt打印在聊天框
     chatDom.innerHTML += `<div class="msg ai"><div class="msg-bubble">已生成任务prompt：\n\n${generatedPrompt}</div></div>`;
     chatDom.scrollTop = chatDom.scrollHeight;
-    // 根据下拉框选择，弹窗询问是否调用本地codebuddy/workbuddy
+    // 根据下拉框选择，弹窗询问是否提交到 codebuddy / workbuddy
     const buddyType = document.getElementById('buddyTypeSelect').value;
-    document.getElementById('codebuddyModalTitle').textContent = `调用本地${buddyType}？`;
-    document.getElementById('codebuddyModalText').textContent = `已根据对话生成任务prompt，是否立即调用本地${buddyType}开始执行？`;
+    if(buddyType === "workbuddy"){
+      document.getElementById('codebuddyModalTitle').textContent = "跳转到 workbuddy？";
+      document.getElementById('codebuddyModalText').textContent =
+        "点击“是”会把生成的 prompt 复制到剪贴板，并在新标签页打开 workbuddy 页面。到 workbuddy 对话框里 Ctrl+V 粘贴后发送即可。请确认当前浏览器已登录 workbuddy。";
+    }else{
+      document.getElementById('codebuddyModalTitle').textContent = "调用本地codebuddy？";
+      document.getElementById('codebuddyModalText').textContent =
+        "已根据对话生成任务prompt，是否立即调用本地codebuddy开始执行？";
+    }
     document.getElementById('codebuddyModalError').textContent = "";
     document.getElementById('codebuddyModal').classList.add('show');
   }catch(err){
@@ -1124,7 +1181,32 @@ async function confirmCallCodebuddy(){
   const errDom = document.getElementById('codebuddyModalError');
   const buddyType = document.getElementById('buddyTypeSelect').value;
   errDom.textContent = "";
-  // 提交期间按钮转圈，防止重复点击
+
+  // workbuddy 分支：直接在当前浏览器新标签页跳转，不走后端浏览器自动化
+  // 前提：用户当前浏览器已登录 workbuddy（网页应用本身就是浏览器里跑的）
+  if(buddyType === "workbuddy"){
+    const wbUrl = workbuddyUrl || "";
+    if(!wbUrl){
+      errDom.textContent = "后端未配置 WORKBUDDY_URL，无法跳转";
+      return;
+    }
+    // 先关弹窗
+    document.getElementById('codebuddyModal').classList.remove('show');
+    // 同步打开新标签（保留用户手势上下文，避免被浏览器拦截弹窗）
+    window.open(wbUrl, '_blank');
+    // 把生成的 prompt 复制到剪贴板，到 workbuddy 对话框 Ctrl+V 粘贴即可
+    let copied = false;
+    try{
+      await navigator.clipboard.writeText(generatedPrompt || "");
+      copied = true;
+    }catch(e){ /* 非安全上下文或权限被拒，忽略：用户可回看上方 prompt 手动复制 */ }
+    const chatDom = document.getElementById('chatContent');
+    chatDom.innerHTML += `<div class="msg ai"><div class="msg-bubble">已在当前浏览器新标签页打开 workbuddy。${copied ? "生成的 prompt 已复制到剪贴板，到 workbuddy 对话框按 Ctrl+V 粘贴后发送即可。" : "请回到上方复制生成的 prompt，再到 workbuddy 对话框粘贴发送。"}\n点此打开 workbuddy：\n<a href="${wbUrl}" target="_blank">${wbUrl} →</a></div></div>`;
+    chatDom.scrollTop = chatDom.scrollHeight;
+    return;
+  }
+
+  // codebuddy 分支：调后端投递任务到本地 codebuddy 工作台
   const btnHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = `<span class="btn-spinner"></span>提交中...`;
@@ -1136,13 +1218,13 @@ async function confirmCallCodebuddy(){
     });
     const data = await resp.json();
     if(!resp.ok) throw new Error(data.message || "call codebuddy failed");
-    // 任务已投递：关弹窗，给出直达该会话的工作台链接（工具批准在工作台里完成）
     document.getElementById('codebuddyModal').classList.remove('show');
     const chatDom = document.getElementById('chatContent');
+    // codebuddy 分支：给出直达该会话的工作台链接（工具批准在工作台里完成）
     chatDom.innerHTML += `<div class="msg ai"><div class="msg-bubble">任务已提交到本地${buddyType}工作台执行（产物目录：${data.task_dir}）。\n执行中每次调用工具都会在工作台里请你手动允许/拒绝，点此直达该任务：\n<a href="${data.workbench_url}" target="_blank">打开任务：${buddyType}工作台 →</a></div></div>`;
     chatDom.scrollTop = chatDom.scrollHeight;
   }catch(err){
-    errDom.textContent = "提交失败，请重试";
+    errDom.textContent = "提交失败：" + (err.message || "请重试");
   }finally{
     btn.disabled = false;
     btn.innerHTML = btnHtml;
