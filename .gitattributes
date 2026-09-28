@@ -1,0 +1,4 @@
+# 不统计html/css/js，不计入语言占比
+*.html linguist-detectable=false
+*.css linguist-detectable=false
+*.js linguist-detectable=false
