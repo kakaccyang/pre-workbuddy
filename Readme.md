@@ -1,5 +1,6 @@
 # pre-workbuddy
 
+![宣传图](docs/images/0.png)
 一个运行在 workbuddy 之前的"需求收集层",你的专属助理：先由 AI 扮演对应职业的专业人士，与甲方多轮对话摸清需求，自动生成最终任务 prompt，再一键交给 workbuddy / codebuddy 执行。
 
 ## 一、背景
